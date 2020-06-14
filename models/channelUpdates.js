@@ -2,7 +2,7 @@ var mongoose = require('mongoose');
 const lib = require('../helpers/twitchAPI.js');
 var Schema = mongoose.Schema;
 
-var ChannelsSchema = new Schema({
+var ChannelUpdatesSchema = new Schema({
   twitch_channel_id   : Number,
   user_name           : String,
   channel_created_at  : Date,
@@ -12,9 +12,10 @@ var ChannelsSchema = new Schema({
   views               : Number,
   status              : String,
   language            : String,
+  time                : { type : Date, default: Date.now }
 });
 
-ChannelsSchema.statics.findByUser = async function (username) {
+ChannelUpdatesSchema.statics.findByUser = async function (username) {
   let channel = await this.findOne({
     user_name: username
   });
@@ -22,13 +23,13 @@ ChannelsSchema.statics.findByUser = async function (username) {
 }
 
 // determine if channels has been populated
-ChannelsSchema.statics.exists = async function () {
+ChannelUpdatesSchema.statics.exists = async function () {
   let size = await this.collection.countDocuments();
   return size > 0;
 }
 
 // save channels
-ChannelsSchema.statics.saveMany = async function (channels) {
+ChannelUpdatesSchema.statics.saveMany = async function (channels) {
   var refactored = []
 
   channels.forEach(channel => {
@@ -49,11 +50,11 @@ ChannelsSchema.statics.saveMany = async function (channels) {
 }
 
 // collect user_ids
-ChannelsSchema.statics.getUsers = async function () {
+ChannelUpdatesSchema.statics.getUsers = async function () {
   let user_names = await this.find({}, {user_name:1});
   return user_names.map((user) => user.user_name);
 }
 
-const Channel = mongoose.model('Channel', ChannelsSchema);
+const ChannelUpdate = mongoose.model('ChannelUpdate', ChannelUpdatesSchema);
 
-exports.Channel = Channel;
+exports.ChannelUpdate = ChannelUpdate;
