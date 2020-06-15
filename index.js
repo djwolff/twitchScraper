@@ -84,7 +84,7 @@ db_fn.connectDb().then(async () => {
   // await casestudy("hashinshin");
 
   // download mongodb into csv
-  await db_fn.downloadCSV('Stream');
+  // await db_fn.downloadCSV('User');
 
   // await setupWebhooks();
   app.listen(process.env.PORT, () =>

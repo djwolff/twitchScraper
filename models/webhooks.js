@@ -34,6 +34,11 @@ WebhookSchema.statics.saveAndVerify = async function (subs, curr) {
   return found;
 }
 
+WebhookSchema.statics.getAll = async function () {
+  let documents = await Webhook.find({});
+  return documents;
+}
+
 const Webhook = mongoose.model('Webhook', WebhookSchema);
 
 exports.Webhook = Webhook;

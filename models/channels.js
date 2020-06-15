@@ -54,6 +54,11 @@ ChannelsSchema.statics.getUsers = async function () {
   return user_names.map((user) => user.user_name);
 }
 
+ChannelsSchema.statics.getAll = async function () {
+  let documents = await Channel.find({});
+  return documents;
+}
+
 const Channel = mongoose.model('Channel', ChannelsSchema);
 
 exports.Channel = Channel;

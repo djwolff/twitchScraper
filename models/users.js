@@ -45,6 +45,11 @@ UserSchema.statics.saveMany = async function (users) {
   return saved_users
 }
 
+UserSchema.statics.getAll = async function () {
+  let documents = await User.find({});
+  return documents;
+}
+
 const User = mongoose.model('User', UserSchema);
 
 exports.User = User;
