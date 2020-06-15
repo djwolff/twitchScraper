@@ -1,0 +1,5 @@
+"topic","callback","expires_at","_id","created_at","__v"
+"https://api.twitch.tv/helix/streams?user_id=60098090","http://9bd6439ebd6c.ngrok.io/webhooks/stream-changed","2020-06-24T20:46:57.000Z","5ee68cc1df10f04018725e9e","2020-06-14T20:46:57.420Z",0
+"https://api.twitch.tv/helix/streams?user_id=60098090","http://9bd6439ebd6c.ngrok.io/webhooks/stream-changed","2020-06-24T20:49:23.000Z","5ee68d53d40d7c4f080b0626","2020-06-14T20:49:23.373Z",0
+"https://api.twitch.tv/helix/streams?user_id=60098090","http://9bd6439ebd6c.ngrok.io/webhooks/stream-changed","2020-06-24T20:52:18.000Z","5ee68e03183f644f2044d32c","2020-06-14T20:52:19.023Z",0
+"https://api.twitch.tv/helix/streams?user_id=60098090","http://9bd6439ebd6c.ngrok.io/webhooks/stream-changed","2020-06-24T20:57:10.000Z","5ee68f262a873c3ec0fad7c7","2020-06-14T20:57:10.867Z",0

@@ -18,11 +18,12 @@ const connectDb = () => {
 const downloadCSV = async (collection) => {
   const dateTime = new Date().toISOString().slice(-24).replace(/\D/g, '').slice(0, 14);
   const filePath = path.join(__dirname, "../", "exports", collection + dateTime + ".csv");
-  const fields = Object.keys(mongoose.modelSchemas[collection].obj)
-
+  var fields = Object.keys(mongoose.modelSchemas[collection].paths);
+  // console.log(fields);
   let csv;
-
+  //
   let docs = await mongoose.modelSchemas[collection].statics.getAll();
+  // console.log(docs);
 
   try {
     csv = json2csv(docs, {fields});
@@ -34,8 +35,7 @@ const downloadCSV = async (collection) => {
   fs.writeFile(filePath, csv, function(err) {
     if(err) { return console.log(err)};
     console.log('File was saved !');
-  })
-  // const documents = await
+  });
 }
 
 User = User["User"];
