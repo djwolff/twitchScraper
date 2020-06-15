@@ -15,27 +15,34 @@ app.use(bodyParser.json())
 app.get("/webhooks/stream-changed", async (req, res) => {
   // recieve hub.challenge
   // console.log("Subscring to stream! -- ", req.query);
+  var topic = req.query['hub.topic'];
+  // send challenge back for verification
   res.send(req.query['hub.challenge']);
-
-  // now check our subscriptions to see if are actually subbed
-  var subs = (await lib.getWebhooks()).data;
-  console.log("now currently subbed to these webhooks: --", subs);
-
+  // now check our subscriptions again to see if are actually subbed
+  var new_subs = (await lib.getWebhooks()).data;
   // TODO: save webhooks
-  var found = false;
-  subs.forEach(sub => {
-    if (sub.topic == req.query["hub.topic"]) {found = true}
-  })
+  var found = await db_fn.models.Webhook.saveAndVerify(new_subs, req.query["hub.topic"]);
   if (!found) {console.log("Problem with returning challenge")}
   else {console.log("challenge successful")};
 })
 
 app.post("/webhooks/stream-changed", (req, res) => {
-  console.log("A stream has been updated!");
-  console.log(req.body); // -> offline = data = [], online = data = channel
+  // console.log(req.body); // -> offline = data = [], online = data = channel
 
-  // TODO: Save in streams table every time it changes
-  // TODO: start saving messages table with streams_id
+  if (req.body["data"].length == 0) {
+    // stream has ended
+    console.log('Stream has ended');
+  } else {
+    console.log("Stream has been updated");
+    // // TODO: Save in streams table every time it changes
+    // var stream = await fn.models.Stream.save(req.body.data)
+    // console.log('Stream has been saved!');
+
+    // TODO: start following this stream every minute w/ setTimeout
+    // db_fn.models.Stream.followStreamWebhook(req.body["data"][0]);
+
+    // TODO: start saving messages table with streams_id
+  }
   res.status(200).end() // Responding is important
 })
 
@@ -65,7 +72,7 @@ async function setupDB() {
 }
 
 async function casestudy(username) {
-  lib.subscribeToUserStream(username);
+  await db_fn.models.Stream.followStream(username);
 }
 
 // Start express on the defined port
@@ -74,7 +81,10 @@ db_fn.connectDb().then(async () => {
   // console.log("finished setting up DB!");
 
   // case study --> follow one streamer
-  await casestudy("djwolff123");
+  // await casestudy("hashinshin");
+
+  // download mongodb into csv
+  await db_fn.downloadCSV('Stream');
 
   // await setupWebhooks();
   app.listen(process.env.PORT, () =>

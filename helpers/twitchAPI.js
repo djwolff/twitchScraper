@@ -5,10 +5,11 @@ var _url = (type, path) => {
     // type = helix -> oauth = bearer
     // type = kraken -> oauth = OAuth
     return {
-      'url': `https://api.twitch.tv/${type}/${path}` + ((type == "kraken") ? "&api_version=5" : ""),
+      'url': `https://api.twitch.tv/${type}/${path}`,
       'headers': {
         'Content-Type': 'application/json',
         'Client-ID': process.env.CLIENT_ID,
+        'Accept': (type == "kraken") ? 'application/vnd.twitchtv.v5+json' : "",
         'Authorization': ((type == "kraken") ? 'OAuth ' : 'Bearer ')+ process.env.OAUTH
       }
     }
@@ -25,7 +26,7 @@ var _webhook = (callback, mode, topic, lease, secret='') => {
       'Authorization': 'Bearer ' + process.env.OAUTH
     },
     'body': JSON.stringify({
-      'hub.callback': callback,
+      'hub.callback': process.env.BASE_URL + callback,
       'hub.mode': mode,
       'hub.topic': topic,
       'hub.lease_seconds': lease,
@@ -48,7 +49,7 @@ async function getChannels(count) {
 }
 
 async function getUsers(usernames) {
-  var req = _url("kraken", `users?login=${usernames.join()}`);
+  var req = _url("helix", `users?login=${usernames.join('&login=')}`);
 
   return await request(req, function(err, resp, body) {
     if (!err && resp.statusCode == 200) {
@@ -64,23 +65,34 @@ async function subscribeToUserStream(username) {
   // first find user_id:
   var user = (await getUsers([username])).users[0];
   var user_id = user._id
-  // console.log(user);
 
-  // use ngrok to simulate server webhook
-  var req = _webhook(
-    'http://4443c7b9d62c.ngrok.io/webhooks/stream-changed',
-    'subscribe',
-    `https://api.twitch.tv/helix/streams?user_id=${user_id}`,
-    864000);
-  // console.log(req);
-  return await request(req, function(err, resp, body) {
-    if (!err && resp.statusCode == 200) {
-      console.log(JSON.stringify(JSON.parse(body), null, 2));
-      return body;
-    }
+  // check to see if already subscribed to stream events:
+  // check if we are already subscribed:
+  var old_subs = (await getWebhooks()).data;
+  var found = undefined;
+  old_subs.forEach(sub => {
+    if (sub.topic.includes(user_id)) {found = sub}
   })
-  .then(body => { return body})
-  .catch(err => console.log(err))
+
+  if (!found) {
+    // use ngrok to simulate server webhook
+    var req = _webhook(
+      `/webhooks/stream-changed`,
+      'subscribe',
+      `https://api.twitch.tv/helix/streams?user_id=${user_id}`,
+      864000);
+    // console.log(req);
+    return await request(req, function(err, resp, body) {
+      if (!err && resp.statusCode == 200) {
+        console.log(JSON.stringify(JSON.parse(body), null, 2));
+        return body;
+      }
+    })
+    .then(body => { return body})
+    .catch(err => console.log(err))
+  } else {
+    console.log(`already actively subscribed to ${username} and expires at ${found.expires_at}`);
+  }
 }
 
 async function getAppToken() {
@@ -122,8 +134,49 @@ async function getWebhooks() {
   .catch(err => console.log(err))
 }
 
+async function getStream(user_name) {
+  var req = _url("helix", `streams?user_login=${user_name}`);
+  // console.log("request: ", req);
+  return await request(req, function(err, resp, body) {
+    if (!err && resp.statusCode == 200) {
+      // console.log(JSON.stringify(JSON.parse(body), null, 2));
+      return body;
+    }
+  })
+  .then(body => { return JSON.parse(body)})
+  .catch(err => console.log(err))
+}
+
+async function getStream(user_name) {
+  var req = _url("helix", `streams?user_login=${user_name}`);
+  // console.log("request: ", req);
+  return await request(req, function(err, resp, body) {
+    if (!err && resp.statusCode == 200) {
+      // console.log(JSON.stringify(JSON.parse(body), null, 2));
+      return body;
+    }
+  })
+  .then(body => { return JSON.parse(body)})
+  .catch(err => console.log(err))
+}
+
+async function krakenGetStream(user_id) {
+  var req = _url("kraken", `streams/${user_id}`);
+  // console.log(req);
+  return await request(req, function(err, resp, body) {
+    if (!err && resp.statusCode == 200) {
+      // console.log(JSON.stringify(JSON.parse(body), null, 2));
+      return body;
+    }
+  })
+  .then(body => { return JSON.parse(body)})
+  .catch(err => console.log(err))
+}
+
 exports.getChannels = getChannels;
 exports.getUsers = getUsers;
 exports.subscribeToUserStream = subscribeToUserStream;
 exports.getWebhooks = getWebhooks;
+exports.getStream = getStream;
+exports.krakenGetStream = krakenGetStream;
 // exports.getFollowers = getFollowers;

@@ -18,7 +18,7 @@ ChannelsSchema.statics.findByUser = async function (username) {
   let channel = await this.findOne({
     user_name: username
   });
-  return user;
+  return channel;
 }
 
 // determine if channels has been populated
