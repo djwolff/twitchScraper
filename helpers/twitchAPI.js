@@ -45,21 +45,21 @@ async function run_request(req) {
   .then(body => {
     if(body) return JSON.parse(body);
   })
-  .catch(err => console.log(err))
+  .catch(err => console.log(err.error))
 }
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
-async function getTop500StreamsKraken(game_name, streams = [], done = false) {
+async function getTopStreamsKraken(game_name, n, streams = [], done = false) {
   if (done) return streams;
   var req = _url("kraken", `streams/?game=${game_name}&language=en&limit=100&offset=${Math.max(0, streams.length-1)}`);
 
   const all = await run_request(req)
   var new_streams = all.streams;
   const all_streams = [...streams, ...new_streams];
-  if(all_streams.length >= 500) return all_streams;
+  if(all_streams.length >= n) return all_streams;
 
-  return await getTop500StreamsKraken(game_name, all_streams, (new_streams.length < 2) ? true : false)
+  return await getTopStreamsKraken(game_name, n, all_streams, (new_streams.length < 2) ? true : false)
 }
 async function getChannels(userid) {
   var req = _url("kraken", `channels/${userid}`);
@@ -106,7 +106,6 @@ async function getWebhooks(auth = '', webhooks = [], p = '') {
 
   webhooks = [...webhooks, ...all.data];
   if(all.pagination == {} || !all.pagination.cursor) {
-    console.log(`finished pulling all webhooks`);
     return webhooks
   }
   return await getWebhooks(auth, webhooks, all.pagination.cursor);
@@ -118,7 +117,7 @@ async function subscribeToUserStream(user, subs) {
   const user_id = user.user_id
   var found = undefined;
   subs.forEach(sub => {
-    if (sub.topic.includes(user_id)) {found = sub}
+    if (sub.topic.includes(user_id) && sub.callback.includes(process.env.BASE_URL)) {found = sub}
   });
 
   if (!found) {
@@ -128,10 +127,10 @@ async function subscribeToUserStream(user, subs) {
       'subscribe',
       `https://api.twitch.tv/helix/streams?user_id=${user_id}`,
       864000);
-    console.log(`subscribing to ${user.name}'s stream`);
     return await run_request(req);
   } else {
-    console.log(`already actively subscribed to ${user.name}'s stream and expires at ${found.expires_at}`);
+    return;
+    // console.log(`already actively subscribed to ${user.name}'s stream and expires at ${found.expires_at}`);
   }
 }
 
@@ -148,7 +147,6 @@ async function getFollowers(channel_id, followers = [], p = '') {
   followers = [...followers, ...all.follows];
   if(!all._cursor || all._cursor == {} || all._cursor == '') {
     console.log(`finished pulling all followers for ${channel_id} -- wait 1 min for cooldown`);
-    await delay(60000);
     return followers
   }
   return await getFollowers(channel_id, followers, all._cursor)
@@ -160,12 +158,11 @@ async function unsubWebhook(id) {
     'unsubscribe',
     `https://api.twitch.tv/helix/streams?user_id=${id}`,
     864000);
-  console.log(`unsubscribing from ${id}'s stream`);
   return await run_request(req);
 }
 
 exports.getTopCategories = getTopCategories;
-exports.getTop500StreamsKraken = getTop500StreamsKraken;
+exports.getTopStreamsKraken = getTopStreamsKraken;
 exports.getChannels = getChannels;
 exports.getUsers = getUsers;
 exports.subscribeToUserStream = subscribeToUserStream;

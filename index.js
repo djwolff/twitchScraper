@@ -24,30 +24,29 @@ app.get("/webhooks/stream-changed", async (req, res) => {
   const topic = req.query['hub.topic'];
 
   // now check our subscriptions again to see if are actually subbed
-  const subs = await lib.getWebhooks();
 
-  var found_sub = undefined;
-  for(let i = 0; i < subs.length; i++) {
-    if (subs[i].topic == topic) {
-      found_sub = {
-        topic: subs[i].topic,
-        callback: subs[i].callback,
-        expires_at: subs[i].expires_at
-      }
-    }
-  }
-  if(found_sub) {
-    const query = db.pgp.helpers.insert(found_sub, constants.webhook_columns, 'webhooks')
-    await db.db.none(query);
-    console.log('CHALLENGE SUCCESSFUL. saved a new webhook -- ', found_sub.topic, 'that expires at', found_sub.expires_at);
-  } else {console.log("Problem with returning challenge OR successfully unsubbed")}
-})
+  // TODO: find a way to check for webhooks AFTER everything to reduce # of calls.
+  // const subs = await lib.getWebhooks();
+  //
+  // var found_sub = undefined;
+  // for(let i = 0; i < subs.length; i++) {
+  //   if (subs[i].topic == topic) {
+  //     found_sub = {
+  //       topic: subs[i].topic,
+  //       callback: subs[i].callback,
+  //       expires_at: subs[i].expires_at
+  //     }
+  //   }
+  // }
+  // if(found_sub) {
+  //   console.log('CHALLENGE SUCCESSFUL. saved a new webhook -- ', found_sub.topic, 'that expires at', found_sub.expires_at);
+  // } else {console.log("Problem with returning challenge OR successfully unsubbed")}
+});
 
 app.post("/webhooks/stream-changed", async (req, res) => {
+  res.status(200).end(); // Responding is important
 
-  if (req.body["data"].length == 0) {
-    console.log('Stream has ended');
-  } else {
+  if (req.body["data"].length != 0) {
     // console.log("Stream has been updated --", req.body.data);
     // TODO: Save in streams table every time it changes
     // var stream = await fn.models.Stream.save(req.body.data)
@@ -60,12 +59,22 @@ app.post("/webhooks/stream-changed", async (req, res) => {
     // TODO: start saving messages table with streams_id with preference on bigger streamers
     // run chatty sequence here.
   };
-  res.status(200).end(); // Responding is important
-})
+});
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
+const delayPromise = (mypromise, mydelay) => {
+  return new Promise(function (resolve, reject) {
+    setTimeout(function() {
+      return resolve(mypromise);
+    }, mydelay);
+  });
+};
+
 async function setupDB() {
+  const timerIncrement = 500;
+  let delaytime = 0;
+
   // get all categories if not already in db.
   const have_categories = (await db.db.query(`select exists (select 1 from categories)`))[0].exists;
   console.log('do we already have categories? -- ', have_categories);
@@ -84,8 +93,8 @@ async function setupDB() {
     var query = db.pgp.helpers.insert(to_save_categories, constants.category_columns, 'categories');
     await db.db.none(query);
     console.log('saved new categories');
-    console.log('waiting a minute to not be flagged by twitch hehe');
-    await delay(60000 * 1) // wait 1 minute
+    // console.log('waiting a bit to not be flagged by twitch hehe');
+    // await delay(60000 * 0.5)
   }
 
   // grab 100 random streamers in each top 5 category if no users exist in our db.
@@ -95,28 +104,49 @@ async function setupDB() {
   let to_save_users = [];
 
   if(!have_users) {
+    // remove previous webhooks linked to current server.
+    var current_hooks = await lib.getWebhooks();
+    delaytime = 0;
+    console.log('unsubbing from previous webhooks ~ 250 seconds');
+    const unsubPromises = [];
+    current_hooks.forEach(hook => {
+      unsubPromises.push(delayPromise(lib.unsubWebhook(hook.topic.split('=')[1]), delaytime));
+      delaytime += timerIncrement
+    });
+    await Promise.all(unsubPromises);
+    // console.log('waiting half a min to not be flagged by twitch hehe');
+    // await delay(60000 * 0.5)
+
     // get top 5 categories
     const top5 = await db.db.query(`SELECT name FROM categories ORDER BY channels DESC LIMIT 5`);
-    const top5promises = top5.map(n => lib.getTop500StreamsKraken(n.name));
+    const top5promises = top5.map(n => lib.getTopStreamsKraken(n.name, 800));
 
     // get 500 current streams for each category
     const streams = await Promise.all(top5promises);
-    var followingpromises = []
+    var userpromises = []
 
+    console.log('grabbing 500 streamers ~250 seconds');
     var reg = /^[a-z]+$/i; // detect english
+    delaytime = 0;
     for (var i = 0; i < 5; i++) {
       const filtered_streams = streams[i].filter(stream => (
         stream.channel.language == 'en' &&
-        (stream.channel.partner == true || stream.channel.followers >= 700 || stream.viewers >= 300)    // wouldn't it be cool if they became a partner during data collection owo
+        (stream.channel.partner == true || stream.channel.followers >= 1000 || stream.viewers >= 300) &&   // wouldn't it be cool if they became a partner during data collection owo
         reg.test(stream.channel.name)
       ))
       console.log(`filtered streams length for ${top5[i].name}: ${filtered_streams.length}`);
+      if (filtered_streams.length < 100) {
+        console.log('not a good time to collect :)');
+        return [];
+      }
       const random_hundred = (helpers.getRandom(filtered_streams, 100)).map(st => st.channel.name);
-      followingpromises.push(lib.getUsers(random_hundred));
+      userpromises.push(delayPromise(lib.getUsers(random_hundred), delaytime));
+      delaytime += timerIncrement;
     }
 
-    const users = await Promise.all(followingpromises);
-    for (var i = 0; i < 5; i++) {
+    var users = await Promise.all(userpromises);
+
+    for (var i = 0; i < users.length; i++) {
       var format_users = users[i].users.map(function(user) {
         return {
           user_id: user._id,
@@ -144,20 +174,17 @@ async function setupDB() {
   const have_channels = (await db.db.query(`select exists (select 1 from channels)`))[0].exists;
   console.log('do we already have channels? -- ', have_channels);
 
-  const current_hooks = await lib.getWebhooks();
-
   if(!have_channels) {
 
-    // remove previous webhooks linked to current server.
-    console.log('unsubbing from previous webhooks');
-    const unsubPromises = current_hooks.map(hook => lib.unsubWebhook(hook.topic.split('=')[1]));
-    await Promise.all(unsubPromises);
-    console.log('waiting a minute to not be flagged by twitch hehe');
-    await delay(60000 * 1) // wait 1 minute
-
     // grab channels associated to each user and save it.
-    var useridpromise = to_save_users.map(user => lib.getChannels(user.user_id));
-    const channels = await Promise.all(useridpromise);
+    console.log('grabbing user channels ~250 seconds');
+    var channelsPromise = [];
+    delaytime = 0;
+    to_save_users.forEach(user => {
+      channelsPromise.push(delayPromise(lib.getChannels(user.user_id), delaytime));
+      delaytime += timerIncrement;
+    });
+    var channels = await Promise.all(channelsPromise);
     var to_save_channels = [];
     channels.forEach(channel => {
       to_save_channels.push({
@@ -180,12 +207,19 @@ async function setupDB() {
     var query = db.pgp.helpers.insert(to_save_channels, constants.channel_columns, 'channels');
     await db.db.none(query);
     console.log('saved new channels!');
-    console.log('waiting a minute to not be flagged by twitch hehe');
-    await delay(60000 * 1) // wait 1 minute
-  }
+  //   console.log('waiting a minute to not be flagged by twitch hehe');
+  //   await delay(60000 * 1) // wait 1 minute
+  // }
 
   // set up webhooks (steam online and new follower) for each user we are following.
-  var hookStreamPromises = to_save_users.map(user => lib.subscribeToUserStream(user, current_hooks));
+  console.log('subscribing to channel webhooks ~250 seconds');
+  var current_hooks = await lib.getWebhooks();
+  var hookStreamPromises = [];
+  delaytime = 0;
+  to_save_users.forEach(user => {
+    hookStreamPromises.push(delayPromise(lib.subscribeToUserStream(user, current_hooks), delaytime));
+    delaytime += timerIncrement;
+  });
   await Promise.all(hookStreamPromises); //fulfill subscriptions
   console.log("finished subscribing to channels");
 
@@ -215,8 +249,8 @@ async function setupDB() {
   // await db.db.none(query);
   // console.log('saved follows for all channels!');
 
-  const channels = to_save_users.map(user => user.name);
-  return channels;
+  const channelnames = to_save_users.map(user => user.name);
+  return channelnames;
 };
 
 app.listen(process.env.PORT, async () => {
@@ -299,11 +333,9 @@ app.listen(process.env.PORT, async () => {
   console.log('finished setting up weekly updates');
 
   // start up chatty processes to log chat from live streams.
-  const chatty = spawn(`java`, [
-    `-jar`, "./chatty/Chatty_0.12/Chatty.jar",
+  const chatty = spawn(`javaw`, [
+    `-jar`, "chatty/Chatty_0.12/Chatty.jar",
     `-channel`, channels,
-    `-d`, `chatty/settings`,
-    `-single`,
     `-connect`
     ]);
 
