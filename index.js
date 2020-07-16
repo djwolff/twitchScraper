@@ -8,6 +8,7 @@ const lib = require('./helpers/twitchAPI.js');
 const helpers = require('./helpers/helperFunctions.js');
 const constants = require('./helpers/constants.js');
 const db = require('./db/index.js')
+const editDotenv = require('edit-dotenv');
 
 require('dotenv').config();    // for client secrets
 const app = express();
@@ -65,24 +66,24 @@ app.post("/webhooks/stream-changed", async (req, res) => {
 
 async function setupDB() {
   // get all categories if not already in db.
-  // const have_categories = (await db.db.query(`select exists (select 1 from categories)`))[0].exists;
-  // console.log('do we already have categories? -- ', have_categories);
-  //
-  // if(!have_categories) {
-    // var categories = await lib.getAllCategories();
-    // console.log("finished getting all", categories.length, "categories (games)");
-  //   var to_save_categories = categories.map(function(game) {
-  //       return {
-  //         game_id: game.game._id,
-  //         channels: game.channels,
-  //         viewers: game.viewers,
-  //         name: game.game.name
-  //       }
-  //   })
-  //   var query = db.pgp.helpers.insert(to_save_categories, constants.category_columns, 'categories');
-  //   await db.db.none(query);
-  //   console.log('saved new categories');
-  // }
+  const have_categories = (await db.db.query(`select exists (select 1 from categories)`))[0].exists;
+  console.log('do we already have categories? -- ', have_categories);
+
+  if(!have_categories) {
+  var categories = await lib.getTopCategories(20);
+  console.log("finished getting", categories.length, "categories (games)");
+    var to_save_categories = categories.map(function(game) {
+        return {
+          game_id: game.game._id,
+          channels: game.channels,
+          viewers: game.viewers,
+          name: game.game.name
+        }
+    })
+    var query = db.pgp.helpers.insert(to_save_categories, constants.category_columns, 'categories');
+    await db.db.none(query);
+    console.log('saved new categories');
+  }
 
   // grab 100 random streamers in each top 5 category if no users exist in our db.
   // db check
@@ -90,19 +91,28 @@ async function setupDB() {
   console.log('do we already have users? -- ', have_users);
   let to_save_users = []
 
+  // const top5 = await db.db.query(`SELECT name FROM categories ORDER BY channels DESC LIMIT 5`);
+  // const top5promises = top5.map(n => lib.getAllStreamsKraken(n.name));
+  // const streams = await Promise.all(top5promises);
+  // console.log("streams:", streams);
+
   if(!have_users) {
     // get top 5 categories
-    const top5 = await db.db.query(`SELECT game_id FROM categories ORDER BY channels DESC LIMIT 5`);
-    const top5promises = top5.map(n => lib.getAllStreams(n.game_id));
+    const top5 = await db.db.query(`SELECT name FROM categories ORDER BY channels DESC LIMIT 5`);
+    const top5promises = top5.map(n => lib.getTop500StreamsKraken(n.name));
 
-    // get 100 current streams for each category
+    // get 500 current streams for each category
     const streams = await Promise.all(top5promises);
     var followingpromises = []
 
     var reg = /^[a-z]+$/i; // detect english
     for (var i = 0; i < 5; i++) {
-      const filtered_streams = streams[i].filter(stream => (stream.language == 'en' && stream.viewer_count > 5 && reg.test(stream.user_name)))
-      const random_hundred = (helpers.getRandom(filtered_streams, 100)).map(st => st.user_name);
+      const filtered_streams = streams[i].filter(stream => (
+        stream.channel.language == 'en' &&
+        stream.channel.followers > 50 &&
+        reg.test(stream.channel.name)
+      ))
+      const random_hundred = (helpers.getRandom(filtered_streams, 100)).map(st => st.channel.name);
       followingpromises.push(lib.getUsers(random_hundred));
     }
 
@@ -126,43 +136,43 @@ async function setupDB() {
     console.log('saved new users');
   } else {
     to_save_users = await db.db.query(`SELECT * FROM streamers`);
+    console.log('pre-loading users');
   }
 
-  // const have_channels = (await db.db.query(`select exists (select 1 from channels)`))[0].exists;
-  // console.log('do we already have channels? -- ', have_channels);
-  //
-  // if(!have_channels) {
-  //   var useridpromise = to_save_users.map(user => lib.getChannels(user.user_id));
-  //   const channels = await Promise.all(useridpromise);
-  //   var to_save_channels = [];
-  //   channels.forEach(channel => {
-  //     to_save_channels.push({
-  //       channel_id: channel._id,
-  //       username: channel.name,
-  //       channel_created_at: channel.created_at,
-  //       channel_updated_at: channel.updated_at,
-  //       game: channel.game,
-  //       followers: channel.followers,
-  //       views: channel.views,
-  //       status: channel.status,
-  //       language: channel.broadcaster_language,
-  //       partner: channel.partner,
-  //       description: channel.description,
-  //       url: channel.url,
-  //       mature: channel.mature
-  //     })
-  //   });
-  //
-  //   var query = db.pgp.helpers.insert(to_save_channels, constants.channel_columns, 'channels');
-  //   await db.db.none(query);
-  //   console.log('saved new channels!');
-  // }
+  const have_channels = (await db.db.query(`select exists (select 1 from channels)`))[0].exists;
+  console.log('do we already have channels? -- ', have_channels);
+
+  if(!have_channels) {
+    var useridpromise = to_save_users.map(user => lib.getChannels(user.user_id));
+    const channels = await Promise.all(useridpromise);
+    var to_save_channels = [];
+    channels.forEach(channel => {
+      to_save_channels.push({
+        channel_id: channel._id,
+        username: channel.name,
+        channel_created_at: channel.created_at,
+        channel_updated_at: channel.updated_at,
+        game: channel.game,
+        followers: channel.followers,
+        views: channel.views,
+        status: channel.status,
+        language: channel.broadcaster_language,
+        partner: channel.partner,
+        description: channel.description,
+        url: channel.url,
+        mature: channel.mature
+      })
+    });
+
+    var query = db.pgp.helpers.insert(to_save_channels, constants.channel_columns, 'channels');
+    await db.db.none(query);
+    console.log('saved new channels!');
+  }
 
   // set up webhooks (steam online and new follower) for each user we are following.
-  // const current_hooks = await lib.getWebhooks();
-  //
-  // var hookStreamPromises = to_save_users.map(user => lib.subscribeToUserStream(user, current_hooks));
-  // await Promise.all(hookStreamPromises); //fulfill subscriptions
+  const current_hooks = await lib.getWebhooks();
+  var hookStreamPromises = to_save_users.map(user => lib.subscribeToUserStream(user, current_hooks));
+  await Promise.all(hookStreamPromises); //fulfill subscriptions
 
   // save channels' followers
   // can't get subscribers due to privacy.
@@ -190,8 +200,8 @@ async function setupDB() {
   // await db.db.none(query);
   // console.log('saved follows for all channels!');
 
-  const channel_ids = to_save_users.map(user => user.name);
-  return channel_ids;
+  const channels = to_save_users.map(user => user.name);
+  return channels;
 };
 
 app.listen(process.env.PORT, async () => {
@@ -247,66 +257,54 @@ app.listen(process.env.PORT, async () => {
     }
 
     // updating channel followings
-    const followerPromises = [to_save_users[0]].map(user => lib.getFollowers(user.user_id));
-    const channelFollowers = await Promise.all(followerPromises);
-
-    console.log(channelFollowers);
-    var to_save_followers = []
-    channelFollowers.forEach((followers, i) => {
-      followers.forEach(follower => {
-        to_save_followers.push({
-          created_at: follower.created_at,
-          channel_id: to_save_users[i].user_id, // user_id is the same as channel id
-          user_id: follower.user._id,
-          user_name: follower.user.name,
-          user_created_at: follower.user.created_at,
-          user_updated_at: follower.user.updated_at,
-          user_type: follower.user.type,
-          notifications: follower.notifications
-        })
-      })
-    });
-    await db.db.none("DELETE FROM follows");
-    var query = db.pgp.helpers.insert(to_save_followers, constants.follow_columns, 'follows')
-    await db.db.none(query);
-    console.log('saved updated channel follows!');
+    // const followerPromises = [to_save_users[0]].map(user => lib.getFollowers(user.user_id));
+    // const channelFollowers = await Promise.all(followerPromises);
+    //
+    // console.log(channelFollowers);
+    // var to_save_followers = []
+    // channelFollowers.forEach((followers, i) => {
+    //   followers.forEach(follower => {
+    //     to_save_followers.push({
+    //       created_at: follower.created_at,
+    //       channel_id: to_save_users[i].user_id, // user_id is the same as channel id
+    //       user_id: follower.user._id,
+    //       user_name: follower.user.name,
+    //       user_created_at: follower.user.created_at,
+    //       user_updated_at: follower.user.updated_at,
+    //       user_type: follower.user.type,
+    //       notifications: follower.notifications
+    //     })
+    //   })
+    // });
+    // await db.db.none("DELETE FROM follows");
+    // var query = db.pgp.helpers.insert(to_save_followers, constants.follow_columns, 'follows')
+    // await db.db.none(query);
+    // console.log('saved updated channel follows!');
   });
   console.log('finished setting up weekly updates');
 
   // start up chatty processes to log chat from live streams.
-  // exec(`java -jar "./chatty/Chatty_0.12/Chatty.jar" -channel ${channels} -d chatty/settings -single -connect`, (error, stdout, stderr) => {
-  //   if (error) {
+  // const chatty = spawn(`java`, [
+  //   `-jar`, "./chatty/Chatty_0.12/Chatty.jar",
+  //   `-channel`, channels,
+  //   `-d`, `chatty/settings`,
+  //   `-single`,
+  //   `-connect`
+  //   ]);
+  //
+  //   chatty.stdout.on("data", data => {
+  //       console.log(`stdout: ${data}`);
+  //   });
+  //
+  //   chatty.stderr.on("data", data => {
+  //       console.log(`stderr: ${data}`);
+  //   });
+  //
+  //   chatty.on('error', (error) => {
   //       console.log(`error: ${error.message}`);
-  //       return;
-  //   }
-  //   if (stderr) {
-  //       console.log(`stderr: ${stderr}`);
-  //       return;
-  //   }
-  //   console.log(`stdout: ${stdout}`);
-  // });
-
-  const chatty = spawn(`java`, [
-    `-jar`, "./chatty/Chatty_0.12/Chatty.jar",
-    `-channel`, channels,
-    `-d`, `chatty/settings`,
-    `-single`,
-    `-connect`
-    ]);
-
-    chatty.stdout.on("data", data => {
-        console.log(`stdout: ${data}`);
-    });
-
-    chatty.stderr.on("data", data => {
-        console.log(`stderr: ${data}`);
-    });
-
-    chatty.on('error', (error) => {
-        console.log(`error: ${error.message}`);
-    });
-
-    chatty.on("close", code => {
-        console.log(`child process exited with code ${code}`);
-    });
+  //   });
+  //
+  //   chatty.on("close", code => {
+  //       console.log(`child process exited with code ${code}`);
+  //   });
 });

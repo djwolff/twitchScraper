@@ -10,7 +10,7 @@ var _url = (type, path) => {
         'Content-Type': 'application/json',
         'Client-ID': process.env.CLIENT_ID,
         'Accept': (type == "kraken") ? 'application/vnd.twitchtv.v5+json' : "",
-        'Authorization': ((type == "kraken") ? 'OAuth ' : 'Bearer ')+ process.env.OAUTH
+        'Authorization': ((type == "kraken") ? 'OAuth ' : 'Bearer ') + process.env.OAUTH
       }
     }
   }
@@ -50,18 +50,17 @@ async function run_request(req) {
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
-async function getAllStreams(game_id, streams = [], p = '') {
-  var req = _url("helix", `streams?game_id=${game_id}&first=100&after=${p}`);
+async function getTop500StreamsKraken(game_name, streams = [], done = false) {
+  if (done) return streams;
+  var req = _url("kraken", `streams/?game=${game_name}&language=en&limit=100&offset=${Math.max(0, streams.length-1)}`);
 
-  var all = await run_request(req);
-  streams = [...streams, ...all.data]
-  if(all.pagination == {} || !all.pagination.cursor) {
-    console.log(`finished pulling ${game_id}`);
-    return streams
-  }
-  return await getAllStreams(game_id, streams, all.pagination.cursor)
+  const all = await run_request(req)
+  var new_streams = all.streams;
+  const all_streams = [...streams, ...new_streams];
+  if(all_streams.length >= 500) return all_streams;
+
+  return await getTop500StreamsKraken(game_name, all_streams, (new_streams.length < 2) ? true : false)
 }
-
 async function getChannels(userid) {
   var req = _url("kraken", `channels/${userid}`);
   return await run_request(req);
@@ -72,11 +71,13 @@ async function getUsers(usernames) {
   return await run_request(req);
 }
 
-async function getAllCategories(cats = [], done = false) {
+async function getTopCategories(n, cats = [], done = false) {
   if (done) return cats;
-  var req = _url("kraken", `games/top?limit=100&offset=${Math.max(0, cats.length-1)}`);
+  var req = _url("kraken", `games/top?limit=${n}&offset=${Math.max(0, cats.length-1)}`);
   var new_cats = (await run_request(req)).top;
-  return await getAllCategories([...cats, ...new_cats], (new_cats.length < 2) ? true : false)
+  const all_cats = [...cats, ...new_cats];
+  if (all_cats.length >= n) return all_cats;
+  return await getTopCategories(n, all_cats, (new_cats.length < 1) ? true : false)
 }
 
 async function getAppTokenWebhooks() {
@@ -93,24 +94,7 @@ async function getAppTokenWebhooks() {
   }
 
   return await run_request(req);
-}
-
-async function getAppTokenScopes(scopes) {
-  let flow = [
-    `client_id=${process.env.CLIENT_ID}`,
-    `client_secret=${process.env.CLIENT_SECRET}`,
-    `grant_type=client_credentials`,
-    `scope=${scopes}`
-  ].join("&");
-
-  var req = {
-    'method': 'POST',
-    'url': 'https://id.twitch.tv/oauth2/token?' + flow,
-    'headers': {'Content-Type': 'application/json'}
-  }
-
-  return await run_request(req);
-}
+};
 
 async function getWebhooks(auth = '', webhooks = [], p = '') {
   // first need to get app token from twitch
@@ -144,6 +128,7 @@ async function subscribeToUserStream(user, subs) {
       'subscribe',
       `https://api.twitch.tv/helix/streams?user_id=${user_id}`,
       864000);
+    console.log(`subscribing to ${user.name}'s stream`);
     return await run_request(req);
   } else {
     console.log(`already actively subscribed to ${user.name}'s stream and expires at ${found.expires_at}`);
@@ -169,9 +154,8 @@ async function getFollowers(channel_id, followers = [], p = '') {
   return await getFollowers(channel_id, followers, all._cursor)
 }
 
-
-exports.getAllCategories = getAllCategories;
-exports.getAllStreams = getAllStreams;
+exports.getTopCategories = getTopCategories;
+exports.getTop500StreamsKraken = getTop500StreamsKraken;
 exports.getChannels = getChannels;
 exports.getUsers = getUsers;
 exports.subscribeToUserStream = subscribeToUserStream;
