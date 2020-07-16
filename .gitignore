@@ -3,3 +3,4 @@ node_modules
 .DS_Store
 exports
 chatty/settings/debuglogs
+chatty/settings/cache/img

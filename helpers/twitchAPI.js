@@ -154,6 +154,16 @@ async function getFollowers(channel_id, followers = [], p = '') {
   return await getFollowers(channel_id, followers, all._cursor)
 }
 
+async function unsubWebhook(id) {
+  const req = _webhook(
+    `/webhooks/stream-changed`,
+    'unsubscribe',
+    `https://api.twitch.tv/helix/streams?user_id=${id}`,
+    864000);
+  console.log(`unsubscribing from ${id}'s stream`);
+  return await run_request(req);
+}
+
 exports.getTopCategories = getTopCategories;
 exports.getTop500StreamsKraken = getTop500StreamsKraken;
 exports.getChannels = getChannels;
@@ -162,3 +172,4 @@ exports.subscribeToUserStream = subscribeToUserStream;
 exports.getWebhooks = getWebhooks;
 exports.getStream = getStream;
 exports.getFollowers = getFollowers;
+exports.unsubWebhook = unsubWebhook;

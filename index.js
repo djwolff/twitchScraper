@@ -22,7 +22,6 @@ app.get("/webhooks/stream-changed", async (req, res) => {
   // recieve hub.challenge
   // console.log("Subscring to stream! -- ", req.query);
   const topic = req.query['hub.topic'];
-  // console.log(req.query);
 
   // now check our subscriptions again to see if are actually subbed
   const subs = await lib.getWebhooks();
@@ -41,7 +40,7 @@ app.get("/webhooks/stream-changed", async (req, res) => {
     const query = db.pgp.helpers.insert(found_sub, constants.webhook_columns, 'webhooks')
     await db.db.none(query);
     console.log('CHALLENGE SUCCESSFUL. saved a new webhook -- ', found_sub.topic, 'that expires at', found_sub.expires_at);
-  } else {console.log("Problem with returning challenge")}
+  } else {console.log("Problem with returning challenge OR successfully unsubbed")}
 })
 
 app.post("/webhooks/stream-changed", async (req, res) => {
@@ -56,13 +55,15 @@ app.post("/webhooks/stream-changed", async (req, res) => {
 
     // TODO: start following this stream every minute w/ setTimeout
     // db_fn.models.Stream.followStreamWebhook(req.body["data"][0]);
-    await db.followStream(req.body.data[0].user_name);
+    db.followStream(req.body.data[0].user_name);
 
     // TODO: start saving messages table with streams_id with preference on bigger streamers
     // run chatty sequence here.
   };
   res.status(200).end(); // Responding is important
 })
+
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
 async function setupDB() {
   // get all categories if not already in db.
@@ -83,18 +84,15 @@ async function setupDB() {
     var query = db.pgp.helpers.insert(to_save_categories, constants.category_columns, 'categories');
     await db.db.none(query);
     console.log('saved new categories');
+    console.log('waiting a minute to not be flagged by twitch hehe');
+    await delay(60000 * 1) // wait 1 minute
   }
 
   // grab 100 random streamers in each top 5 category if no users exist in our db.
   // db check
   const have_users = (await db.db.query(`select exists (select 1 from streamers)`))[0].exists;
   console.log('do we already have users? -- ', have_users);
-  let to_save_users = []
-
-  // const top5 = await db.db.query(`SELECT name FROM categories ORDER BY channels DESC LIMIT 5`);
-  // const top5promises = top5.map(n => lib.getAllStreamsKraken(n.name));
-  // const streams = await Promise.all(top5promises);
-  // console.log("streams:", streams);
+  let to_save_users = [];
 
   if(!have_users) {
     // get top 5 categories
@@ -109,9 +107,10 @@ async function setupDB() {
     for (var i = 0; i < 5; i++) {
       const filtered_streams = streams[i].filter(stream => (
         stream.channel.language == 'en' &&
-        stream.channel.followers > 50 &&
+        (stream.channel.partner == true || stream.channel.followers >= 700 || stream.viewers >= 300)    // wouldn't it be cool if they became a partner during data collection owo
         reg.test(stream.channel.name)
       ))
+      console.log(`filtered streams length for ${top5[i].name}: ${filtered_streams.length}`);
       const random_hundred = (helpers.getRandom(filtered_streams, 100)).map(st => st.channel.name);
       followingpromises.push(lib.getUsers(random_hundred));
     }
@@ -134,15 +133,29 @@ async function setupDB() {
     var query = db.pgp.helpers.insert(to_save_users, constants.streamer_columns, 'streamers');
     await db.db.none(query);
     console.log('saved new users');
+    console.log('waiting a minute to not be flagged by twitch hehe');
+    await delay(60000 * 1) // wait 1 minute
   } else {
     to_save_users = await db.db.query(`SELECT * FROM streamers`);
     console.log('pre-loading users');
   }
 
+
   const have_channels = (await db.db.query(`select exists (select 1 from channels)`))[0].exists;
   console.log('do we already have channels? -- ', have_channels);
 
+  const current_hooks = await lib.getWebhooks();
+
   if(!have_channels) {
+
+    // remove previous webhooks linked to current server.
+    console.log('unsubbing from previous webhooks');
+    const unsubPromises = current_hooks.map(hook => lib.unsubWebhook(hook.topic.split('=')[1]));
+    await Promise.all(unsubPromises);
+    console.log('waiting a minute to not be flagged by twitch hehe');
+    await delay(60000 * 1) // wait 1 minute
+
+    // grab channels associated to each user and save it.
     var useridpromise = to_save_users.map(user => lib.getChannels(user.user_id));
     const channels = await Promise.all(useridpromise);
     var to_save_channels = [];
@@ -167,12 +180,14 @@ async function setupDB() {
     var query = db.pgp.helpers.insert(to_save_channels, constants.channel_columns, 'channels');
     await db.db.none(query);
     console.log('saved new channels!');
+    console.log('waiting a minute to not be flagged by twitch hehe');
+    await delay(60000 * 1) // wait 1 minute
   }
 
   // set up webhooks (steam online and new follower) for each user we are following.
-  const current_hooks = await lib.getWebhooks();
   var hookStreamPromises = to_save_users.map(user => lib.subscribeToUserStream(user, current_hooks));
   await Promise.all(hookStreamPromises); //fulfill subscriptions
+  console.log("finished subscribing to channels");
 
   // save channels' followers
   // can't get subscribers due to privacy.
@@ -284,27 +299,29 @@ app.listen(process.env.PORT, async () => {
   console.log('finished setting up weekly updates');
 
   // start up chatty processes to log chat from live streams.
-  // const chatty = spawn(`java`, [
-  //   `-jar`, "./chatty/Chatty_0.12/Chatty.jar",
-  //   `-channel`, channels,
-  //   `-d`, `chatty/settings`,
-  //   `-single`,
-  //   `-connect`
-  //   ]);
-  //
-  //   chatty.stdout.on("data", data => {
-  //       console.log(`stdout: ${data}`);
-  //   });
-  //
-  //   chatty.stderr.on("data", data => {
-  //       console.log(`stderr: ${data}`);
-  //   });
-  //
-  //   chatty.on('error', (error) => {
-  //       console.log(`error: ${error.message}`);
-  //   });
-  //
-  //   chatty.on("close", code => {
-  //       console.log(`child process exited with code ${code}`);
-  //   });
+  const chatty = spawn(`java`, [
+    `-jar`, "./chatty/Chatty_0.12/Chatty.jar",
+    `-channel`, channels,
+    `-d`, `chatty/settings`,
+    `-single`,
+    `-connect`
+    ]);
+
+    chatty.stdout.on("data", data => {
+        // console.log(`stdout: ${data}`);
+        return;
+    });
+
+    chatty.stderr.on("data", data => {
+        // console.log(`stderr: ${data}`);
+        return;
+    });
+
+    chatty.on('error', (error) => {
+        console.log(`error: ${error.message}`);
+    });
+
+    chatty.on("close", code => {
+        console.log(`child process exited with code ${code}`);
+    });
 });
