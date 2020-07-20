@@ -3,11 +3,10 @@ module.exports = {
   streamer_columns: [
     'user_id',
     'name',
-    'created_at',
-    'updated_at',
+    'user_created_at',
+    'user_updated_at',
     'bio',
-    'twitch_type',
-    'game_id'
+    'twitch_type'
   ],
   channel_columns: [
     'channel_id',

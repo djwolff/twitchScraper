@@ -1,14 +1,9 @@
 function getRandom(arr, n) {
-  var result = new Array(n),
-  len = arr.length,
-  taken = new Array(len);
-  if (n > len) throw new RangeError("getRandom: more elements taken than available");
-  while (n--) {
-    var x = Math.floor(Math.random() * len);
-    result[n] = arr[x in taken ? taken[x] : x];
-    taken[x] = --len in taken ? taken[len] : len;
-  }
-  return result;
+  let users = [...new Set(arr)];
+  if (users.length < n) throw new RangeError("getRandom: more elements taken than available");
+  users.sort( function() { return 0.5 - Math.random() } );
+  var users100 = users.slice(0, n);
+  return users100;
 }
 
 exports.getRandom = getRandom;

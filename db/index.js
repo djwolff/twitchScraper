@@ -16,6 +16,14 @@ const cn = {
 
 const db = pgp(cn);
 
+// function checkProperties(obj) {
+//     for (var key in obj) {
+//         if (obj[key] !== null && obj[key] != "")
+//             return false;
+//     }
+//     return true;
+// }
+
 async function saveStream(stream) {
   var now = new Date();
   console.log(`saving ${stream.user_name}'s stream with viewercount = ${stream.viewer_count} at time: ${now.toLocaleString()}`);
@@ -39,7 +47,8 @@ async function saveStream(stream) {
 async function followStream(username) {
   let ms_stream = await lib.getStream(username);
   if (!ms_stream) {return}
-  let data = ms_stream['data'];
+  // console.log(ms_stream);
+  let data = ms_stream.data;
 
   // TODO: TEST WHEN STREAM CHANGES (name, whatever )
   if(data.length == 0) {
@@ -48,9 +57,13 @@ async function followStream(username) {
     return
   }
   // save stream
-  await saveStream(data[0]);
+  try {
+    await saveStream(data[0]);
+  } catch (err) {
+    console.log('tried to save, but probably malformed data from twitch');
+  }
 
-  setTimeout(followStream, 60 * 1000 * 5, username); // call again in 5 minutes
+  setTimeout(followStream, 60 * 1000 * 10, username); // call again in 5 minutes
 }
 
 

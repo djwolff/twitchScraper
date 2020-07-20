@@ -127,10 +127,11 @@ async function subscribeToUserStream(user, subs) {
       'subscribe',
       `https://api.twitch.tv/helix/streams?user_id=${user_id}`,
       864000);
+    console.log('subbing to', user.name);
     return await run_request(req);
   } else {
     return;
-    // console.log(`already actively subscribed to ${user.name}'s stream and expires at ${found.expires_at}`);
+    console.log(`already actively subscribed to ${user.name}'s stream and expires at ${found.expires_at}`);
   }
 }
 
@@ -161,6 +162,30 @@ async function unsubWebhook(id) {
   return await run_request(req);
 }
 
+async function resubscribeWebhook(user) {
+  await unsubWebhook(user.user_id);
+  await delay(1000);
+  await subscribeToUserStream(user, []);
+}
+
+async function webhookSubscribed(topic, auth = '', p = '') {
+  // first need to get app token from twitch
+  const req = _url("helix", `webhooks/subscriptions?first=100&after=${p}`);
+  if(auth == '') auth = "Bearer " + (await getAppTokenWebhooks()).access_token;
+
+  req.headers.Authorization = auth;
+  const all = await run_request(req);
+
+  var webhooks = all.data;
+  if(webhooks.some(e => e.topic == topic)) {
+    return true
+  }
+  if(!all._cursor || all._cursor == {} || all._cursor == '') {
+    return false
+  }
+  return await webhookSubscribed(topic, auth, all.pagination.cursor);
+}
+
 exports.getTopCategories = getTopCategories;
 exports.getTopStreamsKraken = getTopStreamsKraken;
 exports.getChannels = getChannels;
@@ -170,3 +195,5 @@ exports.getWebhooks = getWebhooks;
 exports.getStream = getStream;
 exports.getFollowers = getFollowers;
 exports.unsubWebhook = unsubWebhook;
+exports.resubscribeWebhook = resubscribeWebhook;
+exports.webhookSubscribed = webhookSubscribed;

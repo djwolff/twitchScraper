@@ -2,5 +2,8 @@
 node_modules
 .DS_Store
 exports
-chatty/settings/debuglogs
+chatty/settings/debuglogs/
 chatty/settings/cache/img
+chatty/debuglogs
+chatty/logs
+webhooks.txt
