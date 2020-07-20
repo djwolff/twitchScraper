@@ -18,12 +18,12 @@ This project uses [Chatty](https://chatty.github.io/) to actively store events t
 5. User follow data to a channel from Twitch.
 
 ### Future developments
-## difference of followers per stream or each week -- influence
-## change of (hopefully tiers) subs per stream or each week -- commitment
-## # of people participating (chat count) -- participation
-## donations per stream or each week -- also commitment
-## peak viewership during the stream -- influence
-## type of stream or title (tags ??). 
-## Attain all followers for all channels we are following (will be able to update easily once initial list is obtained) -- each streamer probably averages 50 API calls so total 2500 calls.
-## Set up messages table (this is kinda hard tbh because the variety of messages that chatty provides)
-## Export tables into csv (for later use by Grace) -- can be done in python.
+#### difference of followers per stream or each week -- influence
+#### change of (hopefully tiers) subs per stream or each week -- commitment
+#### of people participating (chat count) -- participation
+#### donations per stream or each week -- also commitment
+#### peak viewership during the stream -- influence
+#### type of stream or title (tags ??). 
+#### Attain all followers for all channels we are following (will be able to update easily once initial list is obtained) -- each streamer probably averages 50 API calls so total 2500 calls.
+#### Set up messages table (this is kinda hard tbh because the variety of messages that chatty provides)
+#### Export tables into csv (for later use by Grace) -- can be done in python.
