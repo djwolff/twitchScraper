@@ -30,5 +30,6 @@ This project uses [Chatty](https://chatty.github.io/) to actively store events t
 #### Attain all followers for all channels we are following (will be able to update easily once initial list is obtained) -- each streamer probably averages 50 API calls so total 2500 calls.
 #### Set up messages table (this is kinda hard tbh because the variety of messages that chatty provides)
 #### Export tables into csv (for later use by Grace) -- can be done in python.
+#### Add gender to each user
 
 
