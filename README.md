@@ -19,6 +19,8 @@ This project uses [Chatty](https://chatty.github.io/) to actively store events t
 
 ### Notes --
 1. July 21st at 3:31AM CST data collection paused and then resumed at 1:43PM.
+2. Streamer Hashinshin has been banned from twitch July 23rd.
+3. Streamer jordanentmt banned bot from seeing chat.
 
 ### Future developments
 #### difference of followers per stream or each week -- influence
